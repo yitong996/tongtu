@@ -462,8 +462,7 @@ mod ipc_tests {
     #[test]
     fn sidecar_ipc_ignores_long_app_root_and_fits_sockaddr_un() -> anyhow::Result<()> {
         let identity = OwnerIdentity::Unix { uid: 501, gid: 20 };
-        let app_root =
-            Path::new("/Users/support/Library/Application Support/com.yitong.tongtu.dev");
+        let app_root = Path::new("/Users/support/Library/Application Support/com.yitong.tongtu.dev");
         let path = sidecar_ipc_path_for(app_root, &identity)?;
 
         assert!(!path.starts_with(app_root));
