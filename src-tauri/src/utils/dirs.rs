@@ -7,14 +7,18 @@ use std::{fs, path::PathBuf};
 use tauri::Manager as _;
 
 #[cfg(not(feature = "verge-dev"))]
-pub static APP_ID: &str = "io.github.clash-verge-rev.clash-verge-rev";
+pub static APP_ID: &str = "com.yitong.tongtu";
 #[cfg(not(feature = "verge-dev"))]
-pub static BACKUP_DIR: &str = "clash-verge-rev-backup";
+pub static BACKUP_DIR: &str = "tongtu-backup";
+#[cfg(not(feature = "verge-dev"))]
+pub static LEGACY_APP_ID: &str = "io.github.clash-verge-rev.clash-verge-rev";
 
 #[cfg(feature = "verge-dev")]
-pub static APP_ID: &str = "io.github.clash-verge-rev.clash-verge-rev.dev";
+pub static APP_ID: &str = "com.yitong.tongtu.dev";
 #[cfg(feature = "verge-dev")]
-pub static BACKUP_DIR: &str = "clash-verge-rev-backup-dev";
+pub static BACKUP_DIR: &str = "tongtu-backup-dev";
+#[cfg(feature = "verge-dev")]
+pub static LEGACY_APP_ID: &str = "io.github.clash-verge-rev.clash-verge-rev.dev";
 
 pub static PORTABLE_FLAG: OnceCell<bool> = OnceCell::new();
 
@@ -84,6 +88,122 @@ pub fn preinit_app_data_dir() -> Result<PathBuf> {
     let root = PathBuf::from(std::env::var_os("APPDATA").ok_or_else(|| anyhow::anyhow!("APPDATA is unavailable"))?);
 
     Ok(root.join(APP_ID))
+}
+
+/// Previous Clash Verge data directory used before Tongtu adopted its own APP_ID.
+pub fn legacy_app_home_dir() -> Result<PathBuf> {
+    #[cfg(target_os = "macos")]
+    let root = PathBuf::from(std::env::var_os("HOME").ok_or_else(|| anyhow::anyhow!("HOME is unavailable"))?)
+        .join("Library/Application Support");
+    #[cfg(target_os = "linux")]
+    let root = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".local/share"));
+    #[cfg(windows)]
+    let root = PathBuf::from(std::env::var_os("APPDATA").ok_or_else(|| anyhow::anyhow!("APPDATA is unavailable"))?);
+
+    Ok(root.join(LEGACY_APP_ID))
+}
+
+fn should_migrate_from_legacy(new_home: &std::path::Path, legacy_home: &std::path::Path) -> bool {
+    if !legacy_home.join(PROFILE_YAML).is_file() {
+        return false;
+    }
+    // Already migrated or already has Tongtu profiles.
+    if new_home.join(PROFILE_YAML).is_file() {
+        return false;
+    }
+    if new_home.join(".migrated-from-clash-verge").is_file() {
+        return false;
+    }
+    true
+}
+
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let file_type = entry.file_type()?;
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_recursive(&from, &to)?;
+        } else if file_type.is_file() {
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// One-time copy of Clash Verge profiles/settings into the Tongtu data directory.
+pub fn migrate_from_legacy_app_home() -> Result<bool> {
+    let new_home = preinit_app_data_dir()?;
+    let legacy_home = legacy_app_home_dir()?;
+
+    if !should_migrate_from_legacy(&new_home, &legacy_home) {
+        return Ok(false);
+    }
+
+    logging!(
+        info,
+        Type::Setup,
+        "Migrating Clash Verge data from {:?} to {:?}",
+        legacy_home,
+        new_home
+    );
+
+    fs::create_dir_all(&new_home)?;
+
+    let file_names = [
+        PROFILE_YAML,
+        VERGE_CONFIG,
+        CLASH_CONFIG,
+        "dns_config.yaml",
+        "clash-verge.yaml",
+        "clash-verge-check.yaml",
+        "Country.mmdb",
+        "geoip.dat",
+        "geosite.dat",
+        "cache.db",
+        "window_state.json",
+    ];
+    for name in file_names {
+        let from = legacy_home.join(name);
+        if from.is_file() {
+            let to = new_home.join(name);
+            if let Some(parent) = to.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::copy(&from, &to)?;
+        }
+    }
+
+    let profiles_src = legacy_home.join("profiles");
+    if profiles_src.is_dir() {
+        copy_dir_recursive(&profiles_src, &new_home.join("profiles"))?;
+    }
+
+    let icons_src = legacy_home.join("icons");
+    if icons_src.is_dir() {
+        copy_dir_recursive(&icons_src, &new_home.join("icons"))?;
+    }
+
+    let legacy_backup = legacy_home.join("clash-verge-rev-backup");
+    if legacy_backup.is_dir() {
+        copy_dir_recursive(&legacy_backup, &new_home.join(BACKUP_DIR))?;
+    }
+
+    // Best-effort marker so we do not migrate again after the user clears profiles.
+    let _ = fs::write(
+        new_home.join(".migrated-from-clash-verge"),
+        b"migrated from io.github.clash-verge-rev.clash-verge-rev\n",
+    );
+
+    logging!(info, Type::Setup, "Clash Verge data migration completed");
+    Ok(true)
 }
 
 /// get the resources dir
@@ -322,7 +442,7 @@ mod ipc_tests {
     #[test]
     fn sidecar_ipc_stays_in_the_app_root() {
         let identity = OwnerIdentity::Unix { uid: 501, gid: 20 };
-        let app_root = Path::new("/home/test/.local/share/io.github.clash-verge-rev.clash-verge-rev");
+        let app_root = Path::new("/home/test/.local/share/com.yitong.tongtu");
         let path = sidecar_ipc_path_for(app_root, &identity);
 
         assert_eq!(path, app_root.join("verge-mihomo.sock"));
@@ -343,7 +463,7 @@ mod ipc_tests {
     fn sidecar_ipc_ignores_long_app_root_and_fits_sockaddr_un() -> anyhow::Result<()> {
         let identity = OwnerIdentity::Unix { uid: 501, gid: 20 };
         let app_root =
-            Path::new("/Users/support/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev.dev");
+            Path::new("/Users/support/Library/Application Support/com.yitong.tongtu.dev");
         let path = sidecar_ipc_path_for(app_root, &identity)?;
 
         assert!(!path.starts_with(app_root));

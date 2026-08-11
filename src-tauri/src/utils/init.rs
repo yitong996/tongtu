@@ -451,6 +451,14 @@ pub async fn init_config() -> Result<()> {
 
     // We do not need init_log here anymore due to resolve will to the things
 
+    if let Err(e) = dirs::migrate_from_legacy_app_home() {
+        logging!(
+            warn,
+            Type::Setup,
+            "Failed to migrate legacy Clash Verge data into Tongtu home: {e}"
+        );
+    }
+
     #[cfg(target_os = "macos")]
     migrate_legacy_macos_logs().await?;
 
