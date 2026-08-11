@@ -1,5 +1,5 @@
 {
-  "name": "clash-verge",
+  "name": "tongtu",
   "version": "2.5.3",
   "license": "GPL-3.0-only",
   "scripts": {
@@ -16,7 +16,8 @@
     "web:dev": "vite",
     "web:build": "tsc --noEmit && vite build",
     "web:serve": "vite preview",
-    "prebuild": "node scripts/prebuild.mjs",
+    "prebuild": "node scripts/prebuild-offline.mjs",
+    "prebuild:online": "node scripts/prebuild.mjs",
     "updater": "node scripts/updater.mjs",
     "updater-fixed-webview2": "node scripts/updater-fixed-webview2.mjs",
     "portable": "node scripts/portable.mjs",

@@ -12,15 +12,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import {
-  Box,
-  List,
-  Menu,
-  MenuItem,
-  Paper,
-  SvgIcon,
-  ThemeProvider,
-} from '@mui/material'
+import { Box, List, Menu, MenuItem, Paper, ThemeProvider } from '@mui/material'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
 import type { CSSProperties } from 'react'
@@ -29,8 +21,7 @@ import { useTranslation } from 'react-i18next'
 import { Outlet, useNavigate } from 'react-router'
 import { MihomoWebSocket } from 'tauri-plugin-mihomo-api'
 
-import iconDark from '@/assets/image/icon_dark.svg?react'
-import iconLight from '@/assets/image/icon_light.svg?react'
+import logoIcon from '@/assets/image/logo-icon.png'
 import LogoSvg from '@/assets/image/logo.svg?react'
 import { BaseErrorBoundary } from '@/components/base'
 import { LayoutItem } from '@/components/layout/layout-item'
@@ -340,16 +331,17 @@ const Layout = () => {
                   justifyContent: 'space-between',
                 }}
               >
-                <SvgIcon
-                  component={isDark ? iconDark : iconLight}
+                <img
+                  src={logoIcon}
+                  alt="通途"
                   style={{
                     height: '36px',
                     width: '36px',
                     marginTop: '-3px',
                     marginRight: '5px',
                     marginLeft: '-3px',
+                    objectFit: 'contain',
                   }}
-                  inheritViewBox
                 />
                 <LogoSvg fill={isDark ? 'white' : 'black'} />
               </div>
